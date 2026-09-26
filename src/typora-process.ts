@@ -178,8 +178,11 @@ export class TyporaProcessManager {
 
   async close(force = false): Promise<boolean> {
     if (!this.#child || this.#child.exitCode !== null) return false;
-    const closed = this.#child.kill(force ? "SIGKILL" : "SIGTERM");
-    if (closed) await new Promise((resolve) => setTimeout(resolve, 100));
-    return closed;
+    const pid = this.#child.pid;
+    if (!pid) return false;
+    if (process.platform === "win32") await closeTyporaProcess(pid, force);
+    else this.#child.kill(force ? "SIGKILL" : "SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    return true;
   }
 }

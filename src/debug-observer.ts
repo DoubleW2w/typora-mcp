@@ -42,11 +42,13 @@ export class DebugObserver {
   }
 
   console(options: EventReadOptions & { levels?: string[] } = {}) {
-    const result = this.#query("console", options);
-    const events = options.levels
+    const requestedLimit = options.limit ?? 100;
+    const result = this.#events.query({ ...options, types: ["console"], limit: 10_000 });
+    const matching = options.levels
       ? result.events.filter((event) => options.levels!.includes(String(event.payload.level)))
       : result.events;
-    return { ...result, events };
+    const events = matching.slice(0, requestedLimit);
+    return { ...result, events, truncated: result.truncated || matching.length > events.length };
   }
 
   errors(options: EventReadOptions = {}) {
@@ -64,7 +66,9 @@ export class DebugObserver {
     const matching = base.events.filter(
       (event) => !options.urlPattern || String(event.payload.url).includes(options.urlPattern),
     );
-    const events = matching.slice(0, requestedLimit);
+    const events = matching
+      .slice(0, requestedLimit)
+      .map((event) => ({ ...event, payload: { ...event.payload } }));
     if (options.includeBodies) {
       await Promise.all(events.map((event) => this.#addBody(event, options.maxBodyChars ?? 20_000)));
     }

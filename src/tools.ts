@@ -64,6 +64,19 @@ export class TyporaTools {
 
     const targets = this.session.connected ? await this.session.targets() : [];
     const focused = targets.filter((target) => target.focused);
+    let currentFile: { path: string; source: string; confidence: "high" | "medium" } | null = processStatus.filePath
+      ? { path: processStatus.filePath, source: "launch-argument", confidence: "high" as const }
+      : null;
+    if (!currentFile && this.session.connected) {
+      const targetId = focused.length === 1 ? focused[0]!.targetId : targets.length === 1 ? targets[0]!.targetId : undefined;
+      if (targetId) {
+        try {
+          currentFile = await this.session.currentFile(targetId);
+        } catch (error) {
+          warnings.push(`Could not determine current file: ${messageOf(error)}`);
+        }
+      }
+    }
     return {
       running: processStatus.running || processes.length > 0,
       owned: processStatus.owned,
@@ -74,9 +87,7 @@ export class TyporaTools {
       cdpEndpoint: this.session.endpoint ?? processStatus.endpoint,
       targets,
       activeTargetId: focused.length === 1 ? focused[0]!.targetId : null,
-      currentFile: processStatus.filePath
-        ? { path: processStatus.filePath, source: "launch-argument", confidence: "high" }
-        : null,
+      currentFile,
       latestDebugSeq: this.session.observer.latestSeq(),
       warnings,
     };
@@ -92,7 +103,7 @@ export class TyporaTools {
         );
       }
       if (this.process.status().running) await this.process.close(false);
-      else await Promise.all(before.processes.map((item) => closeTyporaProcess(item.pid)));
+      else await Promise.allSettled(before.processes.map((item) => closeTyporaProcess(item.pid)));
       const stopped = await waitForNoTyporaProcesses(5_000);
       if (!stopped) {
         throw new TyporaToolError(
@@ -121,8 +132,12 @@ export class TyporaTools {
     if (!force && this.session.connected) {
       await this.session.closeApplication();
       await delay(250);
-    } else {
+    } else if (this.process.status().running) {
       await this.process.close(force);
+    } else {
+      const processes = await listTyporaProcesses();
+      await Promise.allSettled(processes.map((item) => closeTyporaProcess(item.pid, force)));
+      await delay(250);
     }
     return await this.status();
   }
@@ -192,13 +207,13 @@ export class TyporaTools {
       const rect = node.getBoundingClientRect();
       const computed = getComputedStyle(node);
       const styles = includeStyles
-        ? Object.fromEntries([...computed].map((name) => [name, computed.getPropertyValue(name)]))
+        ? Object.fromEntries(Array.from(computed).map((name) => [name, computed.getPropertyValue(name)]))
         : undefined;
       return {
         tag: node.tagName.toLowerCase(),
         text: (node.textContent ?? "").trim().slice(0, 2_000),
         html: node.outerHTML.slice(0, 20_000),
-        attributes: Object.fromEntries([...node.attributes].map((attribute) => [attribute.name, attribute.value])),
+        attributes: Object.fromEntries(Array.from(node.attributes).map((attribute) => [attribute.name, attribute.value])),
         rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
         visible: rect.width > 0 && rect.height > 0 && computed.visibility !== "hidden" && computed.display !== "none",
         styles,

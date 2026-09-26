@@ -118,8 +118,35 @@ export class TyporaSession {
     await page.reload({ waitUntil: "domcontentloaded" });
   }
 
+  async currentFile(targetId?: string): Promise<{ path: string; source: string; confidence: "medium" } | null> {
+    const page = await this.page(targetId);
+    const found = await page.evaluate(() => {
+      const runtime = window as typeof window & {
+        File?: { filePath?: unknown; getCurrentFilePath?: () => unknown };
+        __typora_file_path__?: unknown;
+      };
+      let getterValue: unknown;
+      try {
+        getterValue = runtime.File?.getCurrentFilePath?.call(runtime.File);
+      } catch {
+        getterValue = undefined;
+      }
+      const candidates: Array<[string, unknown]> = [
+        ["renderer:File.filePath", runtime.File?.filePath],
+        ["renderer:File.getCurrentFilePath", getterValue],
+        ["renderer:__typora_file_path__", runtime.__typora_file_path__],
+        ["dom:data-file-path", document.body?.dataset.filePath],
+      ];
+      return candidates.find(([, value]) => typeof value === "string" && value.length > 0) ?? null;
+    });
+    return found ? { path: String(found[1]), source: String(found[0]), confidence: "medium" } : null;
+  }
+
   async closeApplication(targetId?: string): Promise<void> {
-    const cdp = await this.cdpSession(targetId);
+    if (!this.#context) throw new TyporaSessionError("CDP_UNREACHABLE", "Typora is not connected");
+    const page = targetId ? await this.page(targetId) : [...this.#pages.values()][0];
+    if (!page) throw new TyporaSessionError("RENDERER_NOT_FOUND", "No Typora renderer was found");
+    const cdp = await this.#context.newCDPSession(page);
     await cdp.send("Browser.close");
   }
 
