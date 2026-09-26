@@ -1,12 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { AutoTyporaTools } from "./remote-control.js";
 import { TyporaSessionError } from "./typora-session.js";
 import { TyporaToolError, TyporaTools } from "./tools.js";
 
 const targetId = z.string().optional().describe("Renderer targetId from typora_status; required when no single window is focused");
 const selector = z.string().min(1).describe("CSS selector evaluated in the selected Typora renderer");
 
-export function createServer(tools = new TyporaTools()): McpServer {
+export function createServer(tools: any = new AutoTyporaTools()): McpServer {
   const server = new McpServer(
     { name: "typora-mcp", version: "0.1.0" },
     {

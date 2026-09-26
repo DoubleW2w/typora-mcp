@@ -77,6 +77,31 @@ env = { TYPORA_CDP_ENDPOINT = "http://127.0.0.1:9222" }
 
 `typora_launch.userDataDir` 可指定隔离的 Electron 用户目录。这会允许 MCP 启动一个独立的 Typora 测试实例，而不干扰已经打开的 Typora 窗口。
 
+## Bridge 后端
+
+MCP 支持可选后端：
+
+```text
+TYPORA_BACKEND=auto             # 默认：remote-control 可用时优先，否则尝试 CDP
+TYPORA_BACKEND=remote-control   # 使用 typora_plugin 的本地 JSON-RPC bridge
+TYPORA_BACKEND=cdp              # 使用外部 CDP，仅适用于实际开放 CDP 的 Typora 构建
+```
+
+Remote Control 配置：
+
+```toml
+[mcp_servers.typora]
+command = "node"
+args = ["<项目绝对路径>/dist/src/index.js"]
+env = {
+  TYPORA_BACKEND = "remote-control",
+  TYPORA_RPC_URL = "http://127.0.0.1:5080/",
+  TYPORA_RPC_TOKEN = "<与 remote_control.AUTH_TOKEN 相同的值>"
+}
+```
+
+`remote-control` 后端复用你维护的 `typora_plugin/plugin/remote_control` 协议，不修改该插件的原始逻辑。需要在本地 `remote_control` 配置中显式启用 `ENABLE_EVAL = true`，才能使用 DOM、JavaScript 和调试事件工具；服务仍只连接 loopback，并要求 Bearer Token。
+
 ## 工具
 
 生命周期：

@@ -20,6 +20,7 @@ export interface CandidateOptions {
 export interface LaunchOptions extends CandidateOptions {
   filePath?: string;
   debugPort?: number;
+  debugging?: boolean;
   userDataDir?: string;
   extraArgs?: string[];
 }
@@ -95,10 +96,10 @@ async function windowsRegistryCandidates(): Promise<string[]> {
   }
 }
 
-export function buildLaunchArgs(options: Pick<LaunchOptions, "debugPort" | "filePath" | "userDataDir" | "extraArgs">): string[] {
-  if (!options.debugPort) throw new RangeError("debugPort is required");
+export function buildLaunchArgs(options: Pick<LaunchOptions, "debugPort" | "debugging" | "filePath" | "userDataDir" | "extraArgs">): string[] {
+  if (options.debugging !== false && !options.debugPort) throw new RangeError("debugPort is required");
   return [
-    `--remote-debugging-port=${options.debugPort}`,
+    ...(options.debugging === false ? [] : [`--remote-debugging-port=${options.debugPort}`]),
     ...(options.userDataDir ? [`--user-data-dir=${options.userDataDir}`] : []),
     ...(options.extraArgs ?? []),
     ...(options.filePath ? [options.filePath] : []),
