@@ -95,7 +95,7 @@ export class TyporaTools {
 
   async launch(options: LaunchOptions & { restartIfNeeded?: boolean } = {}) {
     const before = await this.status();
-    if (before.running && !before.rendererConnected) {
+    if (before.running && !before.rendererConnected && !options.userDataDir) {
       if (!options.restartIfNeeded) {
         throw new TyporaToolError(
           "TYPORA_RUNNING_WITHOUT_CDP",
@@ -125,7 +125,11 @@ export class TyporaTools {
         await delay(200);
       }
     }
-    throw new TyporaToolError("CDP_UNREACHABLE", `Typora started but CDP did not become ready: ${messageOf(lastError)}`);
+    const closed = await this.process.close(false);
+    throw new TyporaToolError(
+      "TYPORA_CDP_UNAVAILABLE",
+      `Typora started but did not expose CDP: ${messageOf(lastError)}. This Typora build may disable external debugging.${closed ? " The launched instance was closed." : " The launched instance could not be closed automatically."}`,
+    );
   }
 
   async close(force = false) {

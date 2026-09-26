@@ -5,6 +5,7 @@ import {
   buildWindowsCloseCommand,
   parsePsOutput,
   parseTasklistOutput,
+  parseWindowsRegistryPaths,
   typoraExecutableCandidates,
 } from "../src/typora-process.js";
 
@@ -48,9 +49,16 @@ test("launch arguments enable CDP without shell interpolation", () => {
     buildLaunchArgs({
       debugPort: 9333,
       filePath: "D:\\notes\\a file.md",
+      userDataDir: "D:\\temp\\typora-mcp-profile",
       extraArgs: ["--theme", "night"],
     }),
-    ["--remote-debugging-port=9333", "--theme", "night", "D:\\notes\\a file.md"],
+    [
+      "--remote-debugging-port=9333",
+      "--user-data-dir=D:\\temp\\typora-mcp-profile",
+      "--theme",
+      "night",
+      "D:\\notes\\a file.md",
+    ],
   );
 });
 
@@ -70,4 +78,11 @@ test("process listings keep only Typora processes", () => {
 test("Windows close command is graceful unless force is explicit", () => {
   assert.deepEqual(buildWindowsCloseCommand(123, false), ["/PID", "123", "/T"]);
   assert.deepEqual(buildWindowsCloseCommand(123, true), ["/PID", "123", "/T", "/F"]);
+});
+
+test("Windows registry paths support install folders and display icons", () => {
+  assert.deepEqual(parseWindowsRegistryPaths('D:\\Typora\\\n"E:\\Apps\\Typora.exe",0'), [
+    "D:\\Typora\\Typora.exe",
+    "E:\\Apps\\Typora.exe",
+  ]);
 });

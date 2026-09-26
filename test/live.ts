@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { TyporaTools } from "../src/tools.js";
 
 const tools = new TyporaTools();
 const initial = await tools.status();
-const launchedByTest = !initial.running;
+const testProfile = await mkdtemp(path.join(tmpdir(), "typora-mcp-live-"));
+const launchedByTest = true;
 
 try {
-  const status = launchedByTest ? await tools.launch() : initial;
+  const status = await tools.launch({ userDataDir: testProfile });
   if (!status.rendererConnected) {
     throw new Error(
       "Typora is running without CDP. Close it and rerun npm run test:live, or start it with --remote-debugging-port=9222.",
@@ -52,5 +54,9 @@ try {
   await tools.reload(targetId);
   console.log("Typora live test passed; screenshot: screenshots/live.png");
 } finally {
-  if (launchedByTest) await tools.close(false);
+  if (launchedByTest) {
+    await tools.close(false);
+    if (tools.process.status().running) await tools.close(true);
+  }
+  await rm(testProfile, { recursive: true, force: true });
 }

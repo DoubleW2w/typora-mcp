@@ -20,6 +20,7 @@ export interface CandidateOptions {
 export interface LaunchOptions extends CandidateOptions {
   filePath?: string;
   debugPort?: number;
+  userDataDir?: string;
   extraArgs?: string[];
 }
 
@@ -52,7 +53,10 @@ export function typoraExecutableCandidates(options: CandidateOptions = {}): stri
 }
 
 export async function findTyporaExecutable(options: CandidateOptions = {}): Promise<string | null> {
-  for (const candidate of typoraExecutableCandidates(options)) {
+  const platform = options.platform ?? process.platform;
+  const candidates = typoraExecutableCandidates(options);
+  if (platform === "win32") candidates.push(...(await windowsRegistryCandidates()));
+  for (const candidate of [...new Set(candidates)]) {
     try {
       await access(candidate);
       return candidate;
@@ -63,10 +67,39 @@ export async function findTyporaExecutable(options: CandidateOptions = {}): Prom
   return null;
 }
 
-export function buildLaunchArgs(options: Pick<LaunchOptions, "debugPort" | "filePath" | "extraArgs">): string[] {
+export function parseWindowsRegistryPaths(output: string): string[] {
+  return [...new Set(
+    output
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        const quoted = line.match(/^"([^"]+)"/);
+        const value = (quoted?.[1] ?? line).replace(/,\d+$/, "").trim();
+        return /\.exe$/i.test(value) ? value : path.win32.join(value, "Typora.exe");
+      }),
+  )];
+}
+
+async function windowsRegistryCandidates(): Promise<string[]> {
+  const registryScript =
+    "$keys = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*','HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*'; " +
+    "Get-ItemProperty $keys -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like '*Typora*' } | ForEach-Object { $_.InstallLocation; $_.DisplayIcon }";
+  try {
+    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", registryScript], {
+      windowsHide: true,
+    });
+    return parseWindowsRegistryPaths(stdout);
+  } catch {
+    return [];
+  }
+}
+
+export function buildLaunchArgs(options: Pick<LaunchOptions, "debugPort" | "filePath" | "userDataDir" | "extraArgs">): string[] {
   if (!options.debugPort) throw new RangeError("debugPort is required");
   return [
     `--remote-debugging-port=${options.debugPort}`,
+    ...(options.userDataDir ? [`--user-data-dir=${options.userDataDir}`] : []),
     ...(options.extraArgs ?? []),
     ...(options.filePath ? [options.filePath] : []),
   ];
@@ -180,8 +213,12 @@ export class TyporaProcessManager {
     if (!this.#child || this.#child.exitCode !== null) return false;
     const pid = this.#child.pid;
     if (!pid) return false;
-    if (process.platform === "win32") await closeTyporaProcess(pid, force);
-    else this.#child.kill(force ? "SIGKILL" : "SIGTERM");
+    try {
+      if (process.platform === "win32") await closeTyporaProcess(pid, force);
+      else if (!this.#child.kill(force ? "SIGKILL" : "SIGTERM")) return false;
+    } catch {
+      return false;
+    }
     await new Promise((resolve) => setTimeout(resolve, 100));
     return true;
   }

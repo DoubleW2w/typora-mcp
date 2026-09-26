@@ -32,6 +32,7 @@ export function createServer(tools = new TyporaTools()): McpServer {
         executablePath: z.string().optional(),
         filePath: z.string().optional(),
         debugPort: z.number().int().min(1).max(65535).optional(),
+        userDataDir: z.string().optional().describe("Optional isolated Electron profile directory; permits a separate Typora instance"),
         extraArgs: z.array(z.string()).optional(),
         restartIfNeeded: z.boolean().optional().default(false),
       },

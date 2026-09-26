@@ -57,7 +57,8 @@ ChatGPT Desktop 与同一主机上的 Codex 可以共享 MCP 配置。也可以�
 1. `typora_launch` 的 `executablePath`；
 2. `TYPORA_PATH` 环境变量；
 3. 当前系统的常见安装路径；
-4. `PATH` 中的 `typora`。
+4. `PATH` 中的 `typora`；
+5. Windows 卸载注册表中的 Typora 安装位置。
 
 需要覆盖时，在 MCP 配置中加入环境变量。例如 Codex：
 
@@ -73,6 +74,8 @@ env = { TYPORA_PATH = "D:\\Apps\\Typora\\Typora.exe" }
 ```toml
 env = { TYPORA_CDP_ENDPOINT = "http://127.0.0.1:9222" }
 ```
+
+`typora_launch.userDataDir` 可指定隔离的 Electron 用户目录。这会允许 MCP 启动一个独立的 Typora 测试实例，而不干扰已经打开的 Typora 窗口。
 
 ## 工具
 
@@ -136,6 +139,12 @@ Chromium 远程调试参数必须在进程启动时生效。如果 Typora 已经
 - 显式使用 `restartIfNeeded: true` 才会请求关闭并重新启动；
 - 若存在未保存提示，服务返回 `TYPORA_CLOSE_PENDING`，由用户决定是否保存。
 
+## CDP 兼容性
+
+Typora MCP Server 需要目标 Typora 实例实际开放 Chrome DevTools Protocol。若启动后端口仍不可达，`typora_launch` 返回 `TYPORA_CDP_UNAVAILABLE`，并尝试正常关闭仅由本 MCP 启动的实例。
+
+当前项目在本机安装的 Typora 正式版上进行了隔离实例验证：该版本保留 `--remote-debugging-port` 参数但不监听端口，并且其资源包含拒绝调试的提示。因此本项目不会尝试修改或绕过 Typora 二进制的调试保护。要使用 DOM、Console、CDP 和截图工具，需要使用实际开放 CDP 的 Typora 调试构建或受支持的官方调试接口。
+
 ## 多窗口
 
 `typora_status` 返回每个 renderer 的 `targetId`。有且只有一个窗口获得焦点时，页面工具可以省略 `targetId`；否则必须明确传入，服务不会默认操作第一个窗口。
@@ -154,7 +163,7 @@ npm test
 npm run test:live
 ```
 
-现场测试会创建一个临时 DOM 控件，验证 JavaScript、DOM、输入、点击、Console、截图和 reload；控件会随 reload 消失。若测试自行启动 Typora，结束时会请求正常关闭。截图保存在 `screenshots/live.png`。
+现场测试总是使用临时 Electron profile，创建一个临时 DOM 控件，验证 JavaScript、DOM、输入、点击、Console、截图和 reload；控件会随 reload 消失。测试结束时会请求正常关闭该隔离实例，并删除临时 profile。截图保存在 `screenshots/live.png`。
 
 ## 安全
 
