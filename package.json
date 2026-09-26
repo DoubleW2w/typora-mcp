@@ -1,0 +1,30 @@
+{
+  "name": "typora-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP server for observing and debugging a running Typora instance",
+  "type": "module",
+  "bin": {
+    "typora-mcp": "dist/src/index.js"
+  },
+  "files": [
+    "dist/src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
+    "test:live": "npm run build && node --test dist/test/live.test.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "playwright-core": "^1.63.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3"
+  }
+}
