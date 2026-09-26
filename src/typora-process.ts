@@ -99,6 +99,23 @@ export async function listTyporaProcesses(platform: NodeJS.Platform = process.pl
   return parsePsOutput(stdout).filter((item) => item.pid !== process.pid);
 }
 
+export function buildWindowsCloseCommand(pid: number, force: boolean): string[] {
+  return ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])];
+}
+
+export async function closeTyporaProcess(
+  pid: number,
+  force = false,
+  platform: NodeJS.Platform = process.platform,
+): Promise<void> {
+  if (!Number.isInteger(pid) || pid < 1) throw new RangeError("pid must be positive");
+  if (platform === "win32") {
+    await execFileAsync("taskkill", buildWindowsCloseCommand(pid, force));
+    return;
+  }
+  process.kill(pid, force ? "SIGKILL" : "SIGTERM");
+}
+
 export async function findFreePort(): Promise<number> {
   return await new Promise((resolve, reject) => {
     const server = net.createServer();
@@ -120,6 +137,7 @@ export class TyporaProcessManager {
   #child: ChildProcess | null = null;
   #debugPort: number | null = null;
   #executablePath: string | null = null;
+  #filePath: string | null = null;
 
   status() {
     return {
@@ -128,6 +146,7 @@ export class TyporaProcessManager {
       pid: this.#child?.pid ?? null,
       debugPort: this.#debugPort,
       executablePath: this.#executablePath,
+      filePath: this.#filePath,
       endpoint: this.#debugPort ? `http://127.0.0.1:${this.#debugPort}` : null,
     };
   }
@@ -153,6 +172,7 @@ export class TyporaProcessManager {
     this.#child = child;
     this.#debugPort = debugPort;
     this.#executablePath = executablePath;
+    this.#filePath = options.filePath ?? null;
     return this.status();
   }
 

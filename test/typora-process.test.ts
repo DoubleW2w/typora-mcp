@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildLaunchArgs,
+  buildWindowsCloseCommand,
   parsePsOutput,
   parseTasklistOutput,
   typoraExecutableCandidates,
@@ -64,4 +65,9 @@ test("process listings keep only Typora processes", () => {
     parsePsOutput("  42 Typora /Applications/Typora.app/Contents/MacOS/Typora\n  99 bash bash"),
     [{ pid: 42, command: "/Applications/Typora.app/Contents/MacOS/Typora" }],
   );
+});
+
+test("Windows close command is graceful unless force is explicit", () => {
+  assert.deepEqual(buildWindowsCloseCommand(123, false), ["/PID", "123", "/T"]);
+  assert.deepEqual(buildWindowsCloseCommand(123, true), ["/PID", "123", "/T", "/F"]);
 });
