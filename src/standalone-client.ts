@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { defaultRegistryDir } from "./bridge-service.js";
+import { listTyporaProcesses } from "./typora-process.js";
 
 export interface StandaloneTarget {
   version: number;
@@ -22,7 +23,10 @@ export class StandaloneBridgeError extends Error {
 }
 
 export class StandaloneBridgeClient {
-  constructor(readonly registryDir = process.env.TYPORA_MCP_REGISTRY_DIR ?? defaultRegistryDir()) {}
+  constructor(
+    readonly registryDir = process.env.TYPORA_MCP_REGISTRY_DIR ?? defaultRegistryDir(),
+    private readonly typoraProcesses = listTyporaProcesses,
+  ) {}
 
   async targets(): Promise<StandaloneTarget[]> {
     let files: string[];
@@ -36,18 +40,27 @@ export class StandaloneBridgeClient {
         const entry = JSON.parse(await readFile(join(this.registryDir, file), "utf8")) as StandaloneTarget;
         return entry.version === 1 && entry.host === "127.0.0.1" && typeof entry.targetId === "string" &&
           Number.isInteger(entry.port) && typeof entry.token === "string"
-          ? entry
+          ? { entry, path: join(this.registryDir, file) }
           : null;
       } catch {
         return null;
       }
     }));
-    const registryTargets = targets.filter((entry): entry is StandaloneTarget => entry !== null);
-    const online = await Promise.all(registryTargets.map(async (entry) => {
+    const registryTargets = targets.filter((target): target is { entry: StandaloneTarget; path: string } => target !== null);
+    let liveTyporaPids: Set<number> | null = null;
+    try {
+      liveTyporaPids = new Set((await this.typoraProcesses()).map((process) => process.pid));
+    } catch {
+      // Preserve entries if the operating system process list is unavailable.
+    }
+    const online = await Promise.all(registryTargets.map(async ({ entry, path }) => {
       try {
         await this.#request(entry, "status", {});
         return entry;
       } catch {
+        if (liveTyporaPids !== null && !liveTyporaPids.has(entry.pid)) {
+          await unlink(path).catch(() => undefined);
+        }
         return null;
       }
     }));
