@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import { TyporaProcessManager, type LaunchOptions } from "./typora-process.js";
 import { TyporaTools } from "./tools.js";
 
@@ -13,15 +12,21 @@ export class RemoteControlClient {
   readonly endpoint: string;
   readonly token: string;
   readonly timeoutMs: number;
+  readonly minIntervalMs: number;
   #nextId = 1;
+  #lastRequestAt = 0;
 
   constructor(options: { endpoint?: string; token?: string; timeoutMs?: number } = {}) {
     this.endpoint = options.endpoint ?? process.env.TYPORA_RPC_URL ?? "http://127.0.0.1:5080/";
     this.token = options.token ?? process.env.TYPORA_RPC_TOKEN ?? "secret-token";
     this.timeoutMs = options.timeoutMs ?? 5_000;
+    this.minIntervalMs = Number(process.env.TYPORA_RPC_MIN_INTERVAL_MS ?? 125);
   }
 
   async request<T = unknown>(method: string, params?: unknown): Promise<T> {
+    const wait = this.minIntervalMs - (Date.now() - this.#lastRequestAt);
+    if (wait > 0) await delay(wait);
+    this.#lastRequestAt = Date.now();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -189,7 +194,7 @@ export class RemoteControlTools {
   }
 
   async type(options: { selector: string; index?: number; text: string; clear?: boolean }) {
-    return await this.eval(`(function(){const a=document.querySelectorAll(${json(options.selector)}),e=a[${options.index ?? 0}];if(!e)throw new Error(a.length?"SELECTOR_AMBIGUOUS":"SELECTOR_NOT_FOUND");e.focus();if("value" in e){${options.clear === false ? "" : "e.value=\"\";"}e.value+=${json(options.text)};e.dispatchEvent(new Event("input",{bubbles:true}));e.dispatchEvent(new Event("change",{bubbles:true}))}else{document.execCommand("insertText",false,${json(options.text)})}return{typed:true,characters:${options.text.length}}})()`);
+    return await this.eval(`(function(){const a=document.querySelectorAll(${json(options.selector)}),e=a[${options.index ?? 0}],w=document.querySelector("#write");if(!e)throw new Error(a.length?"SELECTOR_AMBIGUOUS":"SELECTOR_NOT_FOUND");if(w&&w.contains(e))throw new Error("SOURCE_EDIT_FORBIDDEN");e.focus();if("value" in e){${options.clear === false ? "" : "e.value=\"\";"}e.value+=${json(options.text)};e.dispatchEvent(new Event("input",{bubbles:true}));e.dispatchEvent(new Event("change",{bubbles:true}))}else{document.execCommand("insertText",false,${json(options.text)})}return{typed:true,characters:${options.text.length}}})()`);
   }
 
   async pressKey(options: { key: string; selector?: string; index?: number }) {
@@ -203,9 +208,16 @@ export class RemoteControlTools {
   }
 
   async takeScreenshot() {
-    const result = await this.eval("JSBridge.invoke('page.screenshot')");
-    if (typeof result !== "string") throw new RemoteControlError("SCREENSHOT_UNAVAILABLE", "Typora did not return a screenshot path");
-    return await readFile(result);
+    const result = await this.eval(`(async()=>{
+      const electron=reqnode('electron'), clipboard=electron.clipboard;
+      const previous={text:clipboard.readText(),html:clipboard.readHTML(),image:clipboard.readImage().toPNG().toString('base64')};
+      await JSBridge.invoke('page.screenshot');
+      const png=clipboard.readImage().toPNG().toString('base64');
+      try { clipboard.write({text:previous.text,html:previous.html,image:electron.nativeImage.createFromPNG(Buffer.from(previous.image,'base64'))}) } catch (_) { clipboard.writeText(previous.text) }
+      return png;
+    })()`);
+    if (typeof result !== "string" || !result) throw new RemoteControlError("SCREENSHOT_UNAVAILABLE", "Typora did not return screenshot bytes");
+    return Buffer.from(result, "base64");
   }
 
   async eval(expression: string) {

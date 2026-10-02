@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "typora": {
+      "command": "node",
+      "args": [
+        "dist/src/index.js"
+      ],
+      "cwd": ".",
+      "env": {
+        "TYPORA_BACKEND": "standalone"
+      }
+    }
+  }
+}

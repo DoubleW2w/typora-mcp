@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "document": "standalone-live.md",
+  "waits": [
+    { "type": "selector", "value": "#write" },
+    { "type": "text", "value": "Standalone Bridge Fixture" },
+    { "type": "event", "eventType": "network" }
+  ],
+  "actions": [
+    { "type": "scroll", "selector": "#write", "deltaY": 1 },
+    { "type": "networkProbe" }
+  ],
+  "assertions": [
+    { "type": "selectorExists", "selector": "#write" },
+    { "type": "styleEquals", "selector": "#write", "property": "display", "value": "block" },
+    { "type": "event", "eventType": "network" },
+    { "type": "sourceUnchanged" }
+  ]
+}

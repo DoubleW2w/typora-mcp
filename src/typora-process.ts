@@ -174,9 +174,10 @@ export class TyporaProcessManager {
   #filePath: string | null = null;
 
   status() {
+    const running = Boolean(this.#child && this.#child.exitCode === null && !this.#child.killed);
     return {
-      running: Boolean(this.#child && this.#child.exitCode === null && !this.#child.killed),
-      owned: Boolean(this.#child),
+      running,
+      owned: running,
       pid: this.#child?.pid ?? null,
       debugPort: this.#debugPort,
       executablePath: this.#executablePath,

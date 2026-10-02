@@ -1,13 +1,14 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { AutoTyporaTools } from "./remote-control.js";
+import { StandaloneBridgeInstaller } from "./bridge-service.js";
+import { AutoTyporaTools } from "./mcp-debug-adapter.js";
 import { TyporaSessionError } from "./typora-session.js";
 import { TyporaToolError, TyporaTools } from "./tools.js";
 
 const targetId = z.string().optional().describe("Renderer targetId from typora_status; required when no single window is focused");
 const selector = z.string().min(1).describe("CSS selector evaluated in the selected Typora renderer");
 
-export function createServer(tools: any = new AutoTyporaTools()): McpServer {
+export function createServer(tools: any = new AutoTyporaTools(), bridgeInstaller = new StandaloneBridgeInstaller()): McpServer {
   const server = new McpServer(
     { name: "typora-mcp", version: "0.1.0" },
     {
@@ -23,6 +24,50 @@ export function createServer(tools: any = new AutoTyporaTools()): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async () => result(() => tools.status()),
+  );
+
+  server.registerTool(
+    "typora_capabilities",
+    {
+      description: "Read the selected Typora target's explicitly supported debugging and automation capabilities before invoking an optional operation.",
+      inputSchema: { targetId },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ targetId }) => result(() => tools.capabilities(targetId)),
+  );
+
+  server.registerTool(
+    "typora_bridge_status",
+    {
+      description: "Inspect the explicit standalone renderer bridge installation without changing Typora.",
+      inputSchema: { executablePath: z.string().optional() },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ executablePath }) => result(() => bridgeInstaller.status(executablePath)),
+  );
+
+  server.registerTool(
+    "typora_install_bridge",
+    {
+      description: "Explicitly back up Typora window.html and install the standalone local renderer bridge. Restart Typora afterward to load it.",
+      inputSchema: {
+        executablePath: z.string().optional(),
+        registryDir: z.string().optional().describe("Optional local registry directory for renderer targets"),
+        token: z.string().min(16).optional().describe("Optional bridge authentication token; omit to generate one"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async (input) => result(() => bridgeInstaller.install(input)),
+  );
+
+  server.registerTool(
+    "typora_uninstall_bridge",
+    {
+      description: "Remove only the Typora MCP bridge injection and its bridge script. The first pre-install backup is retained.",
+      inputSchema: { executablePath: z.string().optional() },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ executablePath }) => result(() => bridgeInstaller.uninstall(executablePath)),
   );
 
   server.registerTool(
@@ -53,9 +98,42 @@ export function createServer(tools: any = new AutoTyporaTools()): McpServer {
   );
 
   server.registerTool(
+    "typora_restart",
+    {
+      description: "Restart only a Typora instance launched by this MCP server. It never restarts an externally launched instance that might have unsaved work.",
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async () => result(() => tools.restart()),
+  );
+
+  server.registerTool(
+    "typora_open_document",
+    {
+      description: "Open an existing Markdown document in the selected renderer and wait until Typora confirms its path. Fixture validation uses a stricter MCP-owned launch flow.",
+      inputSchema: { targetId, path: z.string().min(1) },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    },
+    async (input) => result(() => tools.openDocument(input)),
+  );
+
+  server.registerTool(
+    "typora_run_fixture",
+    {
+      description: "Run a declarative JSON fixture from the configured fixture root and write separate evidence. Shared targets require explicit opt-in and are never closed or restarted.",
+      inputSchema: {
+        fixturePath: z.string().min(1),
+        targetId,
+        allowSharedTarget: z.boolean().optional().default(false),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+    },
+    async (input) => result(() => tools.runFixture(input)),
+  );
+
+  server.registerTool(
     "typora_reload",
     {
-      description: "Reload the selected Typora renderer and wait for DOMContentLoaded.",
+      description: "Reload the selected Typora renderer when the selected backend supports safe renderer reload. Standalone mode refuses location.reload; use typora_restart for MCP-managed instances.",
       inputSchema: { targetId, ignoreCache: z.boolean().optional().default(false) },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
@@ -69,12 +147,41 @@ export function createServer(tools: any = new AutoTyporaTools()): McpServer {
       inputSchema: {
         targetId,
         selector: z.string().optional().default("html"),
+        snapshotId: z.string().optional(),
+        ref: z.string().optional(),
         format: z.enum(["html", "text", "accessibility"]).optional().default("html"),
         maxChars: z.number().int().min(1).max(500_000).optional().default(50_000),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async (input) => result(() => tools.getDom(input)),
+  );
+
+  server.registerTool(
+    "typora_snapshot",
+    {
+      description: "Create a bounded structured renderer snapshot with a short-lived snapshotRef and revision; prefer this over returning complete HTML.",
+      inputSchema: {
+        targetId,
+        selector: z.string().optional(),
+        rootSelector: z.string().optional(),
+        limit: z.number().int().min(1).max(500).optional().default(100),
+        maxNodes: z.number().int().min(1).max(500).optional(),
+        maxTextChars: z.number().int().min(1).max(10_000).optional().default(1_000),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (input) => result(() => tools.snapshot(input)),
+  );
+
+  server.registerTool(
+    "typora_get_document_source",
+    {
+      description: "Read the current saved Markdown source through the standalone bridge without modifying it; use its sourceHash to prove renderer-side code did not rewrite the file.",
+      inputSchema: { targetId, maxChars: z.number().int().min(1).max(1_000_000).optional().default(500_000) },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async (input) => result(() => tools.getDocumentSource(input)),
   );
 
   server.registerTool(
@@ -93,7 +200,9 @@ export function createServer(tools: any = new AutoTyporaTools()): McpServer {
       description: "Inspect one element's attributes, geometry, computed styles, accessibility, and event listeners.",
       inputSchema: {
         targetId,
-        selector,
+        selector: z.string().min(1).optional(),
+        snapshotId: z.string().optional(),
+        ref: z.string().optional(),
         index: z.number().int().min(0).optional(),
         includeStyles: z.boolean().optional().default(true),
         includeListeners: z.boolean().optional().default(true),
@@ -104,25 +213,31 @@ export function createServer(tools: any = new AutoTyporaTools()): McpServer {
     async (input) => result(() => tools.getElement(input)),
   );
 
-  server.registerTool(
+  if (process.env.TYPORA_DEBUG_MODE === "1") server.registerTool(
     "execute_javascript",
     {
-      description: "Evaluate JavaScript in the selected Typora renderer, like the Developer Tools Console.",
+      description: "Evaluate JavaScript only when the selected CDP or RemoteControl backend explicitly supports it; standalone mode denies arbitrary eval.",
       inputSchema: {
         targetId,
         expression: z.string().min(1),
+        debugToken: z.string().min(1),
         awaitPromise: z.boolean().optional().default(true),
         timeoutMs: z.number().int().min(1).max(120_000).optional().default(10_000),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
-    async (input) => result(() => tools.executeJavascript(input)),
+    async (input) => result(() => {
+      if (!process.env.TYPORA_DEBUG_TOKEN || input.debugToken !== process.env.TYPORA_DEBUG_TOKEN) {
+        throw new TyporaToolError("DEBUG_TOKEN_REQUIRED", "Debug Mode requires the configured debug token");
+      }
+      return tools.executeJavascript(input);
+    }),
   );
 
   server.registerTool(
     "send_cdp_command",
     {
-      description: "Send an arbitrary Chrome DevTools Protocol command to the selected Typora renderer.",
+      description: "Send an arbitrary Chrome DevTools Protocol command when the selected backend exposes CDP; standalone mode does not.",
       inputSchema: { targetId, method: z.string().min(1), params: z.record(z.unknown()).optional() },
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
@@ -186,10 +301,30 @@ export function createServer(tools: any = new AutoTyporaTools()): McpServer {
   );
 
   server.registerTool(
+    "typora_enable_debug_network_capture",
+    {
+      description: "Explicitly enable temporary fetch/XHR network capture for one standalone target. It does not cover IPC, WebSocket, or every internal network channel.",
+      inputSchema: { targetId },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ targetId }) => result(() => tools.enableDebugNetworkCapture(targetId)),
+  );
+
+  server.registerTool(
+    "typora_disable_debug_network_capture",
+    {
+      description: "Restore the target's original fetch/XHR functions after explicit debug network capture.",
+      inputSchema: { targetId },
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async ({ targetId }) => result(() => tools.disableDebugNetworkCapture(targetId)),
+  );
+
+  server.registerTool(
     "click",
     {
       description: "Click a visible element through Playwright/CDP; pass index when the selector matches more than one.",
-      inputSchema: { targetId, selector, index: z.number().int().min(0).optional() },
+      inputSchema: { targetId, selector: z.string().min(1).optional(), snapshotId: z.string().optional(), ref: z.string().optional(), index: z.number().int().min(0).optional() },
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
     },
     async (input) => result(() => tools.click(input)),
@@ -201,7 +336,9 @@ export function createServer(tools: any = new AutoTyporaTools()): McpServer {
       description: "Enter text into a selected Typora element through Playwright/CDP.",
       inputSchema: {
         targetId,
-        selector,
+        selector: z.string().min(1).optional(),
+        snapshotId: z.string().optional(),
+        ref: z.string().optional(),
         index: z.number().int().min(0).optional(),
         text: z.string(),
         clear: z.boolean().optional().default(true),
@@ -219,6 +356,8 @@ export function createServer(tools: any = new AutoTyporaTools()): McpServer {
         targetId,
         key: z.string().min(1),
         selector: z.string().optional(),
+        snapshotId: z.string().optional(),
+        ref: z.string().optional(),
         index: z.number().int().min(0).optional(),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
@@ -233,6 +372,8 @@ export function createServer(tools: any = new AutoTyporaTools()): McpServer {
       inputSchema: {
         targetId,
         selector: z.string().optional(),
+        snapshotId: z.string().optional(),
+        ref: z.string().optional(),
         deltaX: z.number().optional().default(0),
         deltaY: z.number(),
       },

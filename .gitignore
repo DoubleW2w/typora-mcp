@@ -2,3 +2,5 @@ node_modules/
 dist/
 *.log
 screenshots/
+evidence/
+*.tgz

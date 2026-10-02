@@ -1,195 +1,150 @@
-# Typora MCP Server
+# Typora MCP
 
-让 Codex 或 ChatGPT Desktop 直接启动、观察、操作和调试 Typora。服务通过 STDIO 提供 MCP 工具，通过 Chrome DevTools Protocol 连接 Typora renderer，不需要手动打开 Developer Tools 或复制 Console 内容。
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-## 能力
+[![MIT License](https://img.shields.io/badge/license-MIT-6C47FF.svg?style=flat-square)](LICENSE)
+![Node.js 20+](https://img.shields.io/badge/node-%3E%3D20-339933.svg?style=flat-square)
+![MCP](https://img.shields.io/badge/MCP-STDIO-6C47FF.svg?style=flat-square)
 
-- 查找、启动、刷新和关闭 Windows、macOS、Linux 上的 Typora；
-- 获取 DOM、元素样式、可访问性信息和事件监听器；
-- 执行 JavaScript 与原始 CDP 命令；
-- 增量读取 Console、JavaScript 错误和网络事件；
-- 基于 DOM 点击、输入、按键、滚动并截图；
-- 支持多个 Typora renderer，目标不明确时拒绝猜测；
-- renderer 刷新后自动重新发现页面。
+A local-first MCP server for inspecting, debugging, and safely automating a
+running Typora instance through an opt-in renderer bridge.
 
-## 要求
+> [!WARNING]
+> This is an independent community project. It is not affiliated with or
+> endorsed by Typora, Anthropic, or OpenAI.
 
-- Node.js 20 或更高版本；
-- 已安装 Typora；
-- Codex 或 ChatGPT Desktop 等支持本地 STDIO MCP 的客户端。
+## Highlights
 
-## 安装与构建
+- One local MCP server for Codex and Claude Code.
+- Reversible renderer bridge for live DOM, styles, source hashes, console
+  events, and fixture evidence.
+- Structured snapshots and short-lived element refs instead of coordinates.
+- Isolated fixture runs that prove Markdown source was not changed.
 
-```bash
-npm install
-npm run build
-```
+## Requirements
 
-编译入口为绝对路径：
+- Node.js 20 or newer.
+- A local Typora installation.
+- Permission to modify Typora resources only when you explicitly install the
+  bridge.
 
-```text
-<项目目录>/dist/src/index.js
-```
+## Install from source
 
-## 配置 Codex
+    git clone https://github.com/DoubleW2w/typora-mcp.git
+    cd typora-mcp
+    npm install
+    npm run build
 
-使用 CLI：
+This project does not publish an npm package yet. Your client starts the built
+local checkout.
 
-```bash
-codex mcp add typora -- node "<项目绝对路径>/dist/src/index.js"
-codex mcp list
-```
+## Connect Codex
 
-或写入 `~/.codex/config.toml`：
+    codex mcp add typora -- node "<absolute-path-to-typora-mcp>/dist/src/index.js"
+    codex mcp list
 
-```toml
-[mcp_servers.typora]
-command = "node"
-args = ["<项目绝对路径>/dist/src/index.js"]
-```
+Or use your Codex configuration:
 
-ChatGPT Desktop 与同一主机上的 Codex 可以共享 MCP 配置。也可以在 ChatGPT Desktop 的 **Settings → MCP servers → Add server** 中选择 STDIO，并填写相同的命令和参数。
+    [mcp_servers.typora]
+    command = "node"
+    args = ["<absolute-path-to-typora-mcp>/dist/src/index.js"]
+    cwd = "<absolute-path-to-typora-mcp>"
 
-## Typora 路径
+    [mcp_servers.typora.env]
+    TYPORA_PATH = "D:\\Typora\\Typora.exe"
+    TYPORA_BACKEND = "standalone"
 
-服务按以下顺序查找 Typora：
+## Plugin distribution status
 
-1. `typora_launch` 的 `executablePath`；
-2. `TYPORA_PATH` 环境变量；
-3. 当前系统的常见安装路径；
-4. `PATH` 中的 `typora`；
-5. Windows 卸载注册表中的 Typora 安装位置。
+This source-release version supports the official Codex and Claude Code MCP
+configuration formats, but is not yet a remote one-click plugin. A marketplace
+cache does not include this project's Node dependencies. Use the source install
+above, then add the local STDIO server directly.
 
-需要覆盖时，在 MCP 配置中加入环境变量。例如 Codex：
+A remote Codex/Claude plugin will be released after this project ships either
+an npm package or a GitHub Release bundle containing its runtime dependencies.
 
-```toml
-[mcp_servers.typora]
-command = "node"
-args = ["<项目绝对路径>/dist/src/index.js"]
-env = { TYPORA_PATH = "D:\\Apps\\Typora\\Typora.exe" }
-```
+## Connect Claude Code
 
-若 Typora 已经由其他方式以 `--remote-debugging-port=9222` 启动，可设置：
+From your cloned repository, run:
 
-```toml
-env = { TYPORA_CDP_ENDPOINT = "http://127.0.0.1:9222" }
-```
+    claude mcp add typora -- node "<absolute-path-to-typora-mcp>/dist/src/index.js"
+    claude mcp get typora
 
-`typora_launch.userDataDir` 可指定隔离的 Electron 用户目录。这会允许 MCP 启动一个独立的 Typora 测试实例，而不干扰已经打开的 Typora 窗口。
+The committed .mcp.json is a project-scoped Claude Code configuration. It
+starts the built dist/src/index.js from the local checkout root.
 
-## Bridge 后端
+## Install or update the bridge
 
-MCP 支持可选后端：
+Installing the MCP server does not change Typora. First ask the MCP client:
 
-```text
-TYPORA_BACKEND=auto             # 默认：remote-control 可用时优先，否则尝试 CDP
-TYPORA_BACKEND=remote-control   # 使用 typora_plugin 的本地 JSON-RPC bridge
-TYPORA_BACKEND=cdp              # 使用外部 CDP，仅适用于实际开放 CDP 的 Typora 构建
-```
+    Check Typora bridge status. If it is not installed, install it.
 
-Remote Control 配置：
+The explicit typora_install_bridge tool backs up window.html once, adds a
+marker-scoped deferred script loader, writes typora-mcp-bridge.js, and requires
+a normal Typora restart. typora_uninstall_bridge removes only this project's
+marker block and bridge script.
 
-```toml
-[mcp_servers.typora]
-command = "node"
-args = ["<项目绝对路径>/dist/src/index.js"]
-env = {
-  TYPORA_BACKEND = "remote-control",
-  TYPORA_RPC_URL = "http://127.0.0.1:5080/",
-  TYPORA_RPC_TOKEN = "<与 remote_control.AUTH_TOKEN 相同的值>"
-}
-```
+## First prompt
 
-`remote-control` 后端复用你维护的 `typora_plugin/plugin/remote_control` 协议，不修改该插件的原始逻辑。需要在本地 `remote_control` 配置中显式启用 `ENABLE_EVAL = true`，才能使用 DOM、JavaScript 和调试事件工具；服务仍只连接 loopback，并要求 Bearer Token。
+    Check Typora status, then explain whether the standalone bridge is installed,
+    connected, and safe to use for the current document.
 
-## 工具
+## Tool overview
 
-生命周期：
+| Category | Tools | Purpose |
+| --- | --- | --- |
+| Discovery | typora_status, typora_capabilities, typora_bridge_status | Find Typora, targets, bridge state, and supported operations. |
+| Bridge lifecycle | typora_install_bridge, typora_uninstall_bridge | Explicit marker-scoped bridge management. |
+| Inspection | typora_snapshot, get_dom, query_selector, get_element, typora_get_document_source | Inspect renderer state, DOM, styles, and source hashes. |
+| Safe actions | click, type, press_key, scroll | Operate DOM controls; type rejects the editor body. |
+| Lifecycle | typora_launch, typora_close, typora_restart, typora_open_document | Manage MCP-owned Typora instances. |
+| Fixtures | typora_run_fixture | Run read-only JSON fixtures and write separate evidence. |
+| Debug evidence | get_console_logs, get_javascript_errors, get_network_requests | Read cursor-based events. |
+| Debug capture | typora_enable_debug_network_capture, typora_disable_debug_network_capture | Temporarily capture fetch/XHR traffic. |
 
-```text
-typora_status
-typora_launch
-typora_close
-typora_reload
-```
+Optional capabilities are declared by typora_capabilities. Standalone mode does
+not provide screenshots or external CDP. execute_javascript appears only when
+Debug Mode and its separate token are configured.
 
-调试与观察：
+## Fixtures and evidence
 
-```text
-get_dom
-query_selector
-get_element
-execute_javascript
-send_cdp_command
-get_console_logs
-get_javascript_errors
-get_network_requests
-clear_debug_events
-take_screenshot
-```
+Fixtures live below TYPORA_MCP_FIXTURE_ROOT. Each default run starts an isolated
+MCP-owned Typora profile. Evidence is written below
+TYPORA_MCP_EVIDENCE_ROOT/runId:
 
-UI 操作：
+- run.json
+- source.json
+- snapshot.json
+- events.json
+- assertions.json
+- screenshot.png when supported and requested
 
-```text
-click
-type
-press_key
-scroll
-```
+    npm test
+    npm run test:live
 
-## 推荐调试流程
+## Security and limits
 
-```text
-1. typora_status
-2. get_dom / query_selector / get_element
-3. 记住 latestDebugSeq
-4. click / type / press_key 复现问题
-5. 用 afterSeq 获取 Console、错误和网络增量
-6. 必要时 execute_javascript 或 send_cdp_command
-7. 使用宿主 AI 的文件工具修改代码
-8. typora_reload
-9. 重复操作并比较结果
-```
+- The bridge listens only on 127.0.0.1 and authenticates every call with a
+  local token.
+- Bridge installation is explicit and reversible.
+- Normal mode does not expose arbitrary JavaScript evaluation.
+- Network capture is off by default and restores original fetch/XHR functions.
+- Fixtures cannot modify Markdown source through type.
 
-示例提示：
+## Repository layout
 
-> 检查 Typora 当前状态。找到点击无反应的菜单，记录调试事件序号后复现问题，检查新增 Console、JavaScript 错误、网络请求、事件监听器和计算样式。修复代码后刷新 Typora，并重复同一操作验证。
+    src/                 MCP server, bridge, fixtures, and adapters
+    test/                Unit and live Typora verification
+    docs/specs/          V1 product contract
+    .mcp.json            Project-scoped Claude Code MCP configuration
 
-## 已有 Typora 实例
+## Contributing
 
-Chromium 远程调试参数必须在进程启动时生效。如果 Typora 已经运行但没有 CDP：
+Issues and pull requests are welcome. Include a focused reproduction or fixture
+for behavior changes. Never commit Typora installation files, tokens, or local
+evidence.
 
-- `typora_status` 会报告 renderer 不可连接；
-- `typora_launch` 默认返回 `TYPORA_RUNNING_WITHOUT_CDP`，不会擅自关闭；
-- 显式使用 `restartIfNeeded: true` 才会请求关闭并重新启动；
-- 若存在未保存提示，服务返回 `TYPORA_CLOSE_PENDING`，由用户决定是否保存。
+## License
 
-## CDP 兼容性
-
-Typora MCP Server 需要目标 Typora 实例实际开放 Chrome DevTools Protocol。若启动后端口仍不可达，`typora_launch` 返回 `TYPORA_CDP_UNAVAILABLE`，并尝试正常关闭仅由本 MCP 启动的实例。
-
-当前项目在本机安装的 Typora 正式版上进行了隔离实例验证：该版本保留 `--remote-debugging-port` 参数但不监听端口，并且其资源包含拒绝调试的提示。因此本项目不会尝试修改或绕过 Typora 二进制的调试保护。要使用 DOM、Console、CDP 和截图工具，需要使用实际开放 CDP 的 Typora 调试构建或受支持的官方调试接口。
-
-## 多窗口
-
-`typora_status` 返回每个 renderer 的 `targetId`。有且只有一个窗口获得焦点时，页面工具可以省略 `targetId`；否则必须明确传入，服务不会默认操作第一个窗口。
-
-## 测试
-
-不启动 Typora 的测试：
-
-```bash
-npm test
-```
-
-真实 Typora 验收：
-
-```bash
-npm run test:live
-```
-
-现场测试总是使用临时 Electron profile，创建一个临时 DOM 控件，验证 JavaScript、DOM、输入、点击、Console、截图和 reload；控件会随 reload 消失。测试结束时会请求正常关闭该隔离实例，并删除临时 profile。截图保存在 `screenshots/live.png`。
-
-## 安全
-
-服务默认只使用 STDIO，不监听网络端口。`execute_javascript` 和 `send_cdp_command` 拥有与 Developer Tools 相近的能力，只应在可信的本机 MCP 客户端中启用。强制关闭必须显式传入 `force: true`。
+[MIT](LICENSE)

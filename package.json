@@ -1,7 +1,24 @@
 {
   "name": "typora-mcp-server",
   "version": "0.1.0",
-  "description": "MCP server for observing and debugging a running Typora instance",
+  "description": "A local STDIO MCP server for inspecting, debugging, and safely automating running Typora instances.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DoubleW2w/typora-mcp.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DoubleW2w/typora-mcp/issues"
+  },
+  "homepage": "https://github.com/DoubleW2w/typora-mcp#readme",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "typora",
+    "debugging",
+    "claude-code",
+    "codex"
+  ],
   "type": "module",
   "bin": {
     "typora-mcp": "dist/src/index.js"
@@ -13,7 +30,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test \"dist/test/**/*.test.js\"",
-    "test:live": "npm run build && node dist/test/live.js"
+    "test:live": "npm run build && node dist/test/live-fixture.js",
+    "prepack": "npm run build"
   },
   "engines": {
     "node": ">=20"

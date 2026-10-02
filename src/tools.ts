@@ -332,6 +332,9 @@ export class TyporaTools {
 
   async type(options: { targetId?: string; selector: string; index?: number; text: string; clear?: boolean }) {
     const locator = await this.#element(options);
+    if (await locator.evaluate((element) => Boolean(document.querySelector("#write")?.contains(element)))) {
+      throw new TyporaToolError("SOURCE_EDIT_FORBIDDEN", "Typing into the Typora editor body is disabled");
+    }
     if (options.clear ?? true) await locator.fill(options.text);
     else await locator.pressSequentially(options.text);
     return { typed: true, characters: options.text.length };
