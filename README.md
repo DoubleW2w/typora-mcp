@@ -100,6 +100,7 @@ marker block and bridge script.
 | Safe actions | click, type, press_key, scroll | Operate DOM controls; type rejects the editor body. |
 | Lifecycle | typora_launch, typora_close, typora_restart, typora_open_document | Manage MCP-owned Typora instances. |
 | Fixtures | typora_run_fixture | Run read-only JSON fixtures and write separate evidence. |
+| Flight Recorder | typora_diagnostic_start, typora_diagnostic_status, typora_diagnostic_finish, typora_diagnostic_report, typora_diagnostic_cleanup | Record a local redacted timeline and retain compressed diagnostic archives. |
 | Debug evidence | get_console_logs, get_javascript_errors, get_network_requests | Read cursor-based events. |
 | Debug capture | typora_enable_debug_network_capture, typora_disable_debug_network_capture | Temporarily capture fetch/XHR traffic. |
 
@@ -123,6 +124,21 @@ TYPORA_MCP_EVIDENCE_ROOT/runId:
     npm test
     npm run test:live
 
+## Flight Recorder
+
+Start a named run before reproducing a bug:
+
+    Start a Typora diagnostic run named "menu-click-no-response".
+
+Then ask the agent to reproduce and investigate the problem. End with:
+
+    Finish the current Typora diagnostic run, then return its diagnostic report.
+
+The recorder stores a local redacted timeline under
+%LOCALAPPDATA%/typora-mcp/diagnostics by default. Full run directories remain
+for 14 days; older runs are compressed into dated archives and retained. When
+archives exceed 2 GB, MCP reports a storage warning without deleting evidence.
+
 ## Security and limits
 
 - The bridge listens only on 127.0.0.1 and authenticates every call with a
@@ -131,6 +147,8 @@ TYPORA_MCP_EVIDENCE_ROOT/runId:
 - Normal mode does not expose arbitrary JavaScript evaluation.
 - Network capture is off by default and restores original fetch/XHR functions.
 - Fixtures cannot modify Markdown source through type.
+- Diagnostic traces omit bridge tokens, Markdown bodies, input text, and
+  arbitrary JavaScript expressions by default.
 
 ## Repository layout
 

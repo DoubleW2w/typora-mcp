@@ -34,6 +34,8 @@ isolated fixture profile and requires an explicitly installed bridge.
   after capture.
 - Normal mode has no arbitrary JavaScript evaluation. Debug Mode needs its
   separate token.
+- Diagnostic traces are local, redacted, and archival. Keep full runs for 14
+  days, compress older runs, and warn above 2 GB rather than deleting evidence.
 
 ## Public repository
 

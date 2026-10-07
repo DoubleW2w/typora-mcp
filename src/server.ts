@@ -4,11 +4,14 @@ import { StandaloneBridgeInstaller } from "./bridge-service.js";
 import { AutoTyporaTools } from "./mcp-debug-adapter.js";
 import { TyporaSessionError } from "./typora-session.js";
 import { TyporaToolError, TyporaTools } from "./tools.js";
+import { DiagnosticRecorder } from "./diagnostics.js";
 
 const targetId = z.string().optional().describe("Renderer targetId from typora_status; required when no single window is focused");
 const selector = z.string().min(1).describe("CSS selector evaluated in the selected Typora renderer");
 
-export function createServer(tools: any = new AutoTyporaTools(), bridgeInstaller = new StandaloneBridgeInstaller()): McpServer {
+export function createServer(rawTools: any = new AutoTyporaTools(), bridgeInstaller = new StandaloneBridgeInstaller()): McpServer {
+  const diagnostics = new DiagnosticRecorder();
+  const tools = observeTools(rawTools, diagnostics);
   const server = new McpServer(
     { name: "typora-mcp", version: "0.1.0" },
     {
@@ -24,6 +27,53 @@ export function createServer(tools: any = new AutoTyporaTools(), bridgeInstaller
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async () => result(() => tools.status()),
+  );
+
+  server.registerTool(
+    "typora_diagnostic_start",
+    {
+      description: "Start a local redacted diagnostic timeline for subsequent Typora MCP calls.",
+      inputSchema: { name: z.string().min(1).max(200) },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async ({ name }) => result(() => diagnostics.start(name)),
+  );
+
+  server.registerTool(
+    "typora_diagnostic_status",
+    {
+      description: "Inspect the active diagnostic run, local archive usage, and any storage warning.",
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async () => result(() => diagnostics.status()),
+  );
+
+  server.registerTool(
+    "typora_diagnostic_finish",
+    {
+      description: "Mark the active local diagnostic run complete while retaining its report and evidence for archival.",
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    async () => result(() => diagnostics.finish()),
+  );
+
+  server.registerTool(
+    "typora_diagnostic_report",
+    {
+      description: "Read a local diagnostic run summary and its redacted tool-call timeline.",
+      inputSchema: { runId: z.string().optional() },
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    async ({ runId }) => result(() => diagnostics.report(runId)),
+  );
+
+  server.registerTool(
+    "typora_diagnostic_cleanup",
+    {
+      description: "Archive complete diagnostic runs older than 14 days and report local archive storage warnings.",
+      annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+    },
+    async () => result(() => diagnostics.cleanup()),
   );
 
   server.registerTool(
@@ -43,7 +93,7 @@ export function createServer(tools: any = new AutoTyporaTools(), bridgeInstaller
       inputSchema: { executablePath: z.string().optional() },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
-    async ({ executablePath }) => result(() => bridgeInstaller.status(executablePath)),
+    async ({ executablePath }) => result(() => diagnosticAction(diagnostics, "typora_bridge_status", [executablePath], () => bridgeInstaller.status(executablePath))),
   );
 
   server.registerTool(
@@ -57,7 +107,7 @@ export function createServer(tools: any = new AutoTyporaTools(), bridgeInstaller
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
-    async (input) => result(() => bridgeInstaller.install(input)),
+    async (input) => result(() => diagnosticAction(diagnostics, "typora_install_bridge", [input], () => bridgeInstaller.install(input))),
   );
 
   server.registerTool(
@@ -67,7 +117,7 @@ export function createServer(tools: any = new AutoTyporaTools(), bridgeInstaller
       inputSchema: { executablePath: z.string().optional() },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
-    async ({ executablePath }) => result(() => bridgeInstaller.uninstall(executablePath)),
+    async ({ executablePath }) => result(() => diagnosticAction(diagnostics, "typora_uninstall_bridge", [executablePath], () => bridgeInstaller.uninstall(executablePath))),
   );
 
   server.registerTool(
@@ -430,4 +480,36 @@ function failure(error: unknown) {
     content: [{ type: "text" as const, text: `${code}: ${message}` }],
     structuredContent: { ok: false, error: { code, message } },
   };
+}
+
+function observeTools<T extends object>(tools: T, diagnostics: DiagnosticRecorder): T {
+  return new Proxy(tools, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== "function") return value;
+      return async (...args: unknown[]) => {
+        const startedAt = Date.now();
+        try {
+          const result = await value.apply(target, args);
+          await diagnostics.record(String(property), args, result, Date.now() - startedAt);
+          return result;
+        } catch (error) {
+          await diagnostics.recordError(String(property), args, error, Date.now() - startedAt);
+          throw error;
+        }
+      };
+    },
+  });
+}
+
+async function diagnosticAction<T>(diagnostics: DiagnosticRecorder, tool: string, args: unknown[], action: () => Promise<T>) {
+  const startedAt = Date.now();
+  try {
+    const result = await action();
+    await diagnostics.record(tool, args, result, Date.now() - startedAt);
+    return result;
+  } catch (error) {
+    await diagnostics.recordError(tool, args, error, Date.now() - startedAt);
+    throw error;
+  }
 }

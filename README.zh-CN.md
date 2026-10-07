@@ -89,6 +89,7 @@ typora_install_bridge 会备份一次 window.html、添加带 marker 的延迟�
 | 安全 UI 操作 | click、type、press_key、scroll | 操作 DOM 控件；type 会拒绝正文编辑区。 |
 | Typora 生命周期 | typora_launch、typora_close、typora_restart、typora_open_document | 管理由 MCP 启动的 Typora。 |
 | Fixture | typora_run_fixture | 运行只读 JSON fixture，写入独立证据。 |
+| Flight Recorder | typora_diagnostic_start、typora_diagnostic_status、typora_diagnostic_finish、typora_diagnostic_report、typora_diagnostic_cleanup | 记录本地脱敏 timeline，并长期保留压缩诊断档案。 |
 | 调试证据 | get_console_logs、get_javascript_errors、get_network_requests | 读取带 cursor 的事件。 |
 | 网络捕获 | typora_enable_debug_network_capture、typora_disable_debug_network_capture | 临时捕获 fetch/XHR。 |
 
@@ -108,6 +109,23 @@ Fixture 位于 TYPORA_MCP_FIXTURE_ROOT 下。默认运行会启动隔离、由 M
     npm test
     npm run test:live
 
+## Flight Recorder
+
+复现问题前，先启动一个命名诊断 run：
+
+    启动一个名为 "menu-click-no-response" 的 Typora 诊断记录。
+
+再让 AI 复现并排查问题。结束时要求：
+
+    结束当前 Typora 诊断 run，再返回 diagnostic report。
+
+默认记录到：
+
+    %LOCALAPPDATA%/typora-mcp/diagnostics
+
+完整 run 目录保留 14 天；超期后压缩到按月份归档的本地 archive 中并继续保留。
+archive 超过 2 GB 时 MCP 只发出 storage warning，不会自动删除证据。
+
 ## 安全与限制
 
 - bridge 仅监听 127.0.0.1，每次调用均需本地 token。
@@ -115,6 +133,7 @@ Fixture 位于 TYPORA_MCP_FIXTURE_ROOT 下。默认运行会启动隔离、由 M
 - 普通模式不开放任意 JavaScript 执行。
 - 网络捕获默认关闭，结束后恢复原始 fetch/XHR。
 - fixture 不能通过 type 改写 Markdown 源码。
+- 默认 diagnostic trace 不保存 bridge token、Markdown 正文、输入文本或任意 JavaScript expression。
 
 ## 贡献
 
