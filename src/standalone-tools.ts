@@ -197,7 +197,7 @@ export class StandaloneTyporaTools {
       if (action.type === "click") await this.click({ targetId, selector: action.selector });
       if (action.type === "pressKey") await this.pressKey({ targetId, selector: action.selector, key: action.key });
       if (action.type === "scroll") await this.scroll({ targetId, selector: action.selector, deltaX: action.deltaX, deltaY: action.deltaY });
-      if (action.type === "type") await this.type({ targetId, selector: action.selector, text: action.text, clear: action.clear });
+      if (action.type === "type") await this.client.call("typeReadOnly", { selector: action.selector, text: action.text, clear: action.clear }, targetId);
       if (action.type === "networkProbe") {
         await this.enableDebugNetworkCapture(targetId);
         networkCaptureEnabled = true;

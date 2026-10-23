@@ -47,6 +47,11 @@ test("Typora window.html resolves beside the executable resources directory", ()
   );
 });
 
+test("bridge injection persists the explicit editor input setting", () => {
+  assert.match(bridgeBlock({ ...config, allowSourceEdit: true }), /"allowSourceEdit":true/);
+  assert.doesNotMatch(bridgeBlock(config), /"allowSourceEdit":true/);
+});
+
 test("installation keeps the first host backup and uninstall removes only the bridge", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "typora-mcp-"));
   t.after(() => rm(directory, { recursive: true, force: true }));

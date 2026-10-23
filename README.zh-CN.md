@@ -86,7 +86,7 @@ typora_install_bridge 会备份一次 window.html、添加带 marker 的延迟�
 | 发现 | typora_status、typora_capabilities、typora_bridge_status | 发现 Typora、target、bridge 状态和能力。 |
 | Bridge 生命周期 | typora_install_bridge、typora_uninstall_bridge | 显式管理 marker-scoped bridge。 |
 | 检查 | typora_snapshot、get_dom、query_selector、get_element、typora_get_document_source | 检查 renderer、DOM、样式和源码 hash。 |
-| 安全 UI 操作 | click、type、press_key、scroll | 操作 DOM 控件；type 会拒绝正文编辑区。 |
+| 安全 UI 操作 | click、type、press_key、scroll | 操作 DOM 控件；正文输入需显式开启 allowSourceEdit。 |
 | Typora 生命周期 | typora_launch、typora_close、typora_restart、typora_open_document | 管理由 MCP 启动的 Typora。 |
 | Fixture | typora_run_fixture | 运行只读 JSON fixture，写入独立证据。 |
 | Flight Recorder | typora_diagnostic_start、typora_diagnostic_status、typora_diagnostic_finish、typora_diagnostic_report、typora_diagnostic_cleanup | 记录本地脱敏 timeline，并长期保留压缩诊断档案。 |
@@ -132,7 +132,12 @@ archive 超过 2 GB 时 MCP 只发出 storage warning，不会自动删除证据
 - 安装 bridge 是显式、可逆操作。
 - 普通模式不开放任意 JavaScript 执行。
 - 网络捕获默认关闭，结束后恢复原始 fetch/XHR。
-- fixture 不能通过 type 改写 Markdown 源码。
+- 正文输入默认关闭。安装 standalone bridge 时设置 `allowSourceEdit: true`，再打开新的
+  Typora 窗口或正常重启 Typora。`typora_capabilities` 会报告各窗口的 `sourceEdit`。
+  `type` 沿用已有行为：`clear` 默认 `true`，替换目标元素的全部内容。
+  传入 `clear: false` 可在光标处插入，或替换当前选中的文字。
+  fixture 始终禁止正文输入，即使已经开启 `allowSourceEdit`。
+  已打开的窗口保留原设置；此选项不开放任意 JavaScript，也不改变其他后端。
 - 默认 diagnostic trace 不保存 bridge token、Markdown 正文、输入文本或任意 JavaScript expression。
 
 ## 贡献

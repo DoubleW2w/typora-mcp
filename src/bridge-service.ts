@@ -45,11 +45,12 @@ export class StandaloneBridgeInstaller {
     };
   }
 
-  async install(options: { executablePath?: string; registryDir?: string; token?: string } = {}) {
+  async install(options: { executablePath?: string; registryDir?: string; token?: string; allowSourceEdit?: boolean } = {}) {
     const windowHtmlPath = await this.#windowHtmlPath(options.executablePath);
     const config: BridgeConfig = {
       registryDir: options.registryDir ?? defaultRegistryDir(),
       token: options.token ?? randomBytes(32).toString("base64url"),
+      allowSourceEdit: options.allowSourceEdit === true,
     };
     return {
       ...(await installBridge(windowHtmlPath, config, standaloneBridgeSource)),

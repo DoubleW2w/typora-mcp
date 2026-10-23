@@ -16,6 +16,10 @@ test("STDIO server advertises the complete Typora debugging surface", async () =
   try {
     await client.connect(transport);
     const result = await client.listTools();
+    const typeTool = result.tools.find((tool) => tool.name === "type")!;
+    assert.equal((typeTool.inputSchema.properties!.clear as { default?: boolean }).default, true);
+    const installTool = result.tools.find((tool) => tool.name === "typora_install_bridge")!;
+    assert.equal((installTool.inputSchema.properties!.allowSourceEdit as { default?: boolean }).default, false);
     assert.deepEqual(
       result.tools.map((tool) => tool.name).sort(),
       [

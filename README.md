@@ -97,7 +97,7 @@ marker block and bridge script.
 | Discovery | typora_status, typora_capabilities, typora_bridge_status | Find Typora, targets, bridge state, and supported operations. |
 | Bridge lifecycle | typora_install_bridge, typora_uninstall_bridge | Explicit marker-scoped bridge management. |
 | Inspection | typora_snapshot, get_dom, query_selector, get_element, typora_get_document_source | Inspect renderer state, DOM, styles, and source hashes. |
-| Safe actions | click, type, press_key, scroll | Operate DOM controls; type rejects the editor body. |
+| Safe actions | click, type, press_key, scroll | Operate DOM controls; editor typing requires explicit allowSourceEdit opt-in. |
 | Lifecycle | typora_launch, typora_close, typora_restart, typora_open_document | Manage MCP-owned Typora instances. |
 | Fixtures | typora_run_fixture | Run read-only JSON fixtures and write separate evidence. |
 | Flight Recorder | typora_diagnostic_start, typora_diagnostic_status, typora_diagnostic_finish, typora_diagnostic_report, typora_diagnostic_cleanup | Record a local redacted timeline and retain compressed diagnostic archives. |
@@ -146,7 +146,15 @@ archives exceed 2 GB, MCP reports a storage warning without deleting evidence.
 - Bridge installation is explicit and reversible.
 - Normal mode does not expose arbitrary JavaScript evaluation.
 - Network capture is off by default and restores original fetch/XHR functions.
-- Fixtures cannot modify Markdown source through type.
+- Editor typing is disabled by default. Install the standalone bridge with
+  `allowSourceEdit: true` to enable it, then open a new Typora window (or restart
+  Typora normally). `typora_capabilities` reports `sourceEdit` for each window.
+  The existing `type` behavior is unchanged: `clear` defaults to `true` and replaces
+  the target element's contents. Use `clear: false` to insert at the caret or
+  replace the current text selection.
+  Fixtures always reject editor input, even when `allowSourceEdit` is enabled.
+  Existing windows keep their previous setting.
+  This option does not enable arbitrary JavaScript or change other backends.
 - Diagnostic traces omit bridge tokens, Markdown bodies, input text, and
   arbitrary JavaScript expressions by default.
 

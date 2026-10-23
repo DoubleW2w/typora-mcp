@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 export interface BridgeConfig {
   registryDir: string;
   token: string;
+  allowSourceEdit?: boolean;
 }
 
 const START = "<!-- typora-mcp-bridge:start -->";

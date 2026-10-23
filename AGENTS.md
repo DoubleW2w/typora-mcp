@@ -4,8 +4,8 @@
 
 - The default backend order is Standalone Bridge, RemoteControl adapter, then
   CDP. Capability discovery decides what an active target may do.
-- The host AI owns source-file edits. MCP UI actions must not modify Markdown
-  editor content; type rejects elements inside #write.
+- Editor typing is opt-in: the standalone bridge rejects #write input unless
+  installed with allowSourceEdit: true. Check each target's sourceEdit capability.
 - Fixtures are read-only inputs. Keep evidence outside fixture roots.
 - Close or restart only MCP-owned Typora instances. Existing user windows are
   observable but not lifecycle-managed.

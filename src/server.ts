@@ -104,6 +104,7 @@ export function createServer(rawTools: any = new AutoTyporaTools(), bridgeInstal
         executablePath: z.string().optional(),
         registryDir: z.string().optional().describe("Optional local registry directory for renderer targets"),
         token: z.string().min(16).optional().describe("Optional bridge authentication token; omit to generate one"),
+        allowSourceEdit: z.boolean().optional().default(false).describe("Allow typing into the Markdown editor; disabled by default"),
       },
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
@@ -383,7 +384,7 @@ export function createServer(rawTools: any = new AutoTyporaTools(), bridgeInstal
   server.registerTool(
     "type",
     {
-      description: "Enter text into a selected Typora element through Playwright/CDP.",
+      description: "Enter text into a selected Typora element. Standalone editor input requires allowSourceEdit.",
       inputSchema: {
         targetId,
         selector: z.string().min(1).optional(),

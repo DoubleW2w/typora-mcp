@@ -203,17 +203,46 @@ export const standaloneBridgeSource = String.raw`/* typora-mcp standalone render
     return describe(element, false);
   }
 
-  function type(params) {
+  function type(params, allowSourceEdit) {
     const element = selected(params);
     const editor = document.querySelector("#write");
-    if (editor && editor.contains(element)) throw new Error("SOURCE_EDIT_FORBIDDEN");
+    const isEditor = editor && editor.contains(element);
+    if (editor && element !== editor && element.contains(editor)) throw new Error("SOURCE_EDIT_FORBIDDEN");
+    if (isEditor && (config.allowSourceEdit !== true || allowSourceEdit === false)) throw new Error("SOURCE_EDIT_FORBIDDEN");
+    if (!isEditor && !("value" in element) && !element.isContentEditable) {
+      throw new Error(allowSourceEdit === false ? "SOURCE_EDIT_FORBIDDEN" : "ELEMENT_NOT_EDITABLE");
+    }
     const text = String(params.text || "");
+    if (isEditor) {
+      const file = window.File;
+      if (!file || file.isLocked || !file.editor || typeof file.editor.insertText !== "function") throw new Error("EDITOR_INPUT_UNAVAILABLE");
+      element.focus();
+      const selection = window.getSelection();
+      if (params.clear !== false || !selection.rangeCount || !element.contains(selection.anchorNode)) {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        if (params.clear === false) range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+      file.editor.insertText(text);
+      invalidateSnapshots();
+      return describe(element, false);
+    }
     element.focus();
     if ("value" in element) {
       if (params.clear !== false) element.value = "";
       element.value += text;
     } else {
-      if (params.clear !== false) document.execCommand("selectAll", false);
+      const selection = window.getSelection();
+      if (!selection) throw new Error("ELEMENT_NOT_EDITABLE");
+      if (params.clear !== false || !selection.rangeCount || !element.contains(selection.anchorNode) || !element.contains(selection.focusNode)) {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        if (params.clear === false) range.collapse(false);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
       if (!document.execCommand("insertText", false, text)) element.textContent = (params.clear === false ? element.textContent : "") + text;
     }
     element.dispatchEvent(new Event("input", { bubbles: true }));
@@ -329,6 +358,7 @@ export const standaloneBridgeSource = String.raw`/* typora-mcp standalone render
     }),
     capabilities: () => ({
       snapshot: true,
+      sourceEdit: config.allowSourceEdit === true,
       sourceRead: true,
       resourceTiming: true,
       debugNetworkCapture: true,
@@ -345,6 +375,7 @@ export const standaloneBridgeSource = String.raw`/* typora-mcp standalone render
     getElement: getElement,
     click: click,
     type: type,
+    typeReadOnly: (params) => type(params, false),
     pressKey: pressKey,
     scroll: scroll,
     debugEvents: debugEvents,
